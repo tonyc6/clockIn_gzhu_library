@@ -204,8 +204,8 @@ class clockIn():
         tomorrow = tomorrow.strftime('%Y-%m-%d')
 
         # 将下面的值转换成json格式
-        reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00'))
-        reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00'))
+        reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '18:20:00', '22:10:00'))
+        reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:30:00', '18:00:00'))
 
         logger.info(reserve1)
         logger.info(reserve2)
