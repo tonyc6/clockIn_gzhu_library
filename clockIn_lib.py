@@ -260,25 +260,40 @@ class clockIn():
         return no - 101266684 + 1
 
      def get_cookie(self):
-      # 获取Cookie字符串
+          # 获取Cookie字符串
+          current_url = self.driver.current_url
+          logger.info(f'当前URL: {current_url}')
 
-      ans = self.driver.get_cookies()
-      logger.info('cookies' + str(ans))
+          ans = self.driver.get_cookies()
+          logger.info('所有cookies: ' + str(ans))
 
-      if len(ans) != 0:
-          # 构建所有cookie的字符串
-          cookie_parts = []
-          for cookie in ans:
-              if cookie.get('domain', '').endswith('libbooking.gzhu.edu.cn'):
-                  cookie_parts.append(f"{cookie.get('name')}={cookie.get('value')}")
-                  logger.info(f"Added cookie: {cookie.get('name')}")
+          if len(ans) != 0:
+              # 构建所有cookie的字符串
+              cookie_parts = []
+              for cookie in ans:
+                  domain = cookie.get('domain', '')
+                  name = cookie.get('name', '')
+                  value = cookie.get('value', '')
 
-          if cookie_parts:
-              cookie_string = '; '.join(cookie_parts)
-              logger.info(f"Final cookie string: {cookie_string}")
-              return cookie_string
+                  logger.info(f'检查cookie: {name} (domain: {domain})')
 
-      return ''
+                  # 检查相关域名
+                  if (domain.endswith('libbooking.gzhu.edu.cn') or
+                      domain.endswith('gzhu.edu.cn') or
+                      'ic-cookie' in name or
+                      'JSESSIONID' in name):
+
+                      cookie_parts.append(f"{name}={value}")
+                      logger.info(f"Added cookie: {name}")
+
+              if cookie_parts:
+                  cookie_string = '; '.join(cookie_parts)
+                  logger.info(f"Final cookie string: {cookie_string}")
+                  return cookie_string
+              else:
+                  logger.warning('没有找到相关的cookie')
+
+          return ''
 
     def notify(self, content):
         """图书馆预约信息
