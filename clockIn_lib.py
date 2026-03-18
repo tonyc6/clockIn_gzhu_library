@@ -219,7 +219,10 @@ class clockIn():
         user_id = self.get_user_info()
 
         # 尝试通过API获取正确的用户ID
-        self.get_user_info_from_api(cookie)  # 只是为了获取可能的token
+        api_user_id = self.get_user_info_from_api(cookie)  # 尝试获取用户ID
+        if api_user_id:
+            user_id = api_user_id
+            logger.info(f'从API获取到用户ID: {user_id}')
 
         # 尝试从学号生成用户ID
         possible_user_ids = self.generate_possible_user_ids()
@@ -232,11 +235,11 @@ class clockIn():
             test_result = self.test_user_id(cookie, test_id)
             if test_result:
                 valid_user_id = test_id
+                logger.info(f'找到有效的用户ID: {valid_user_id}')
                 break
 
         if valid_user_id:
             user_id = valid_user_id
-            logger.info(f'找到有效的用户ID: {user_id}')
         else:
             logger.warning(f'无法确定正确的用户ID，使用默认值: {user_id}')
 
@@ -257,8 +260,24 @@ class clockIn():
         logger.info(reserve1)
         logger.info(reserve2)
 
-        message = f'''{tomorrow} 座位101-{self.SEATNO}，上午预定：{'预约成功' if reserve1.get('code') == 0 else '预约失败，设备在该时间段内已被预约'}
-            {tomorrow} 座位101-{self.SEATNO}，下午预定：{'预约成功' if reserve2.get('code') == 0 else '预约失败，设备在该时间段内已被预约'}
+        # 分析预约结果
+        def get_reserve_status(result):
+            code = result.get('code')
+            message = result.get('message')
+            if code == 0:
+                return '预约成功'
+            elif message == '请用户使用自己的账号预约':
+                return '预约失败，用户ID不正确'
+            elif message == '设备在该时间段内已被预约':
+                return '预约失败，设备在该时间段内已被预约'
+            else:
+                return f'预约失败，{message}'
+
+        morning_status = get_reserve_status(reserve1)
+        afternoon_status = get_reserve_status(reserve2)
+
+        message = f'''{tomorrow} 座位101-{self.SEATNO}，上午预定：{morning_status}
+            {tomorrow} 座位101-{self.SEATNO}，下午预定：{afternoon_status}
         '''
 
         logger.info(message)
@@ -314,29 +333,23 @@ class clockIn():
         """根据学号生成可能的用户ID"""
         possible_ids = []
 
-        # 添加默认ID
-        possible_ids.append('101598216')
-
-        # 尝试基于学号生成ID
+        # 首先添加用户提供的学号
         if self.xuhao:
-            try:
+            possible_ids.append(self.xuhao)
+            
+            # 尝试学号的不同变体
+            if self.xuhao.isdigit():
+                student_num = int(self.xuhao)
                 # 直接使用学号
-                possible_ids.append(self.xuhao)
-
-                # 学号转换为整数
-                if self.xuhao.isdigit():
-                    student_num = int(self.xuhao)
-                    possible_ids.append(str(student_num))
-
-                    # 尝试一些常见的转换方式
-                    possible_ids.append(str(student_num + 100000000))
-                    possible_ids.append(str(student_num + 101000000))
-                    possible_ids.append(str(student_num + 101500000))
-                    possible_ids.append(str(student_num + 101590000))
-                    possible_ids.append(str(student_num + 101598000))
-
-            except Exception as e:
-                logger.warning(f"生成用户ID时出错: {e}")
+                possible_ids.append(str(student_num))
+                # 尝试一些可能的用户ID格式
+                possible_ids.append(str(student_num))  # 直接使用学号
+                possible_ids.append(str(student_num + 100000000))  # 加上1亿
+                possible_ids.append(str(student_num + 101000000))  # 加上1.01亿
+                possible_ids.append(str(student_num + 101500000))  # 加上1.015亿
+        
+        # 添加默认ID作为最后的选择
+        possible_ids.append('101598216')
 
         # 去重并保持顺序
         unique_ids = []
@@ -384,13 +397,22 @@ class clockIn():
 
             logger.info(f"测试用户ID {user_id} 结果: {result}")
 
-            # 只有当返回的不是"请用户使用自己的账号预约"且不是"请求参数错误"时，才认为ID可能正确
-            if result.get('message') != '请用户使用自己的账号预约' and result.get('code') != 100:
-                logger.info(f"用户ID {user_id} 可能是正确的")
-                return True
-            else:
-                logger.info(f"用户ID {user_id} 不正确")
+            # 分析结果
+            code = result.get('code')
+            message = result.get('message')
+            
+            # 如果返回"请用户使用自己的账号预约"，说明用户ID不正确
+            if message == '请用户使用自己的账号预约':
+                logger.info(f"用户ID {user_id} 不正确: {message}")
                 return False
+            # 如果返回"请求参数错误"，说明用户ID格式可能不正确
+            elif code == 100 and message == '请求参数错误':
+                logger.info(f"用户ID {user_id} 格式可能不正确: {message}")
+                return False
+            # 如果返回其他错误，可能是座位已被预约或其他原因，但用户ID可能是正确的
+            else:
+                logger.info(f"用户ID {user_id} 可能是正确的，返回结果: {message}")
+                return True
 
         except Exception as e:
             logger.warning(f"测试用户ID {user_id} 时出错: {e}")
