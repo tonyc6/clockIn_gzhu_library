@@ -162,6 +162,9 @@ class clockIn():
         logger.info('step2 正在转到图书馆界面')
         logger.info('标题: ' + self.driver.title)
 
+        # 等待登录完全完成，页面完全加载
+        time.sleep(3)
+
     def step3(self):
         logger.info('step3 准备进行图书馆预定座位操作')
         logger.info('标题: ' + self.driver.title)
@@ -170,23 +173,43 @@ class clockIn():
         if 'libbooking.gzhu.edu.cn' not in self.driver.current_url:
             logger.info('正在跳转到图书馆域名...')
             self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+            time.sleep(5)  # 增加等待时间
+
+        # 最多尝试5次获取cookie，给足够时间让登录完成
+        for attempt in range(5):
+            logger.info(f'第{attempt + 1}次尝试获取cookie...')
+
+            # 等待页面完全加载
             time.sleep(3)
 
-        # 最多尝试3次获取cookie
-        for attempt in range(3):
             cookie = self.get_cookie()
 
             if cookie != '':
+                logger.info(f'第{attempt + 1}次尝试成功获取cookie')
                 break
 
             logger.info(f'第{attempt + 1}次尝试获取cookie失败')
 
-            if attempt < 2:  # 不是最后一次尝试
-                # 重新尝试访问
-                self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
-                time.sleep(5)
+            if attempt < 4:  # 不是最后一次尝试
+                # 刷新页面重新尝试
+                logger.info('刷新页面重新尝试...')
+                self.driver.refresh()
+                time.sleep(3)
+
+                # 检查当前URL
+                current_url = self.driver.current_url
+                logger.info(f'当前URL: {current_url}')
+
+                # 如果跳转到了登录页面，重新登录
+                if 'cas' in current_url or 'login' in current_url:
+                    logger.warning('跳转到了登录页面，重新登录')
+                    self.step1()
+                    self.step2()
+                    # 重新跳转到图书馆页面
+                    self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+                    time.sleep(5)
             else:
-                logger.error('3次尝试都无法获取cookie，跳过本次预约')
+                logger.error('5次尝试都无法获取cookie，跳过本次预约')
                 self.fail = True
                 return
 
