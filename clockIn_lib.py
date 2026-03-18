@@ -259,18 +259,26 @@ class clockIn():
     def decalc_devno(self, no):
         return no - 101266684 + 1
 
-    def get_cookie(self):
-        # 获取Cookie字符串
+     def get_cookie(self):
+      # 获取Cookie字符串
 
-        ans = self.driver.get_cookies()
-        logger.info('cookies' + str(ans))
+      ans = self.driver.get_cookies()
+      logger.info('cookies' + str(ans))
 
-        if len(ans) != 0:
-            logger.info(ans[0])
-            logger.info(ans[0].get('name'))
-            return ans[0].get('name') + "=" + ans[0].get('value')
+      if len(ans) != 0:
+          # 构建所有cookie的字符串
+          cookie_parts = []
+          for cookie in ans:
+              if cookie.get('domain', '').endswith('libbooking.gzhu.edu.cn'):
+                  cookie_parts.append(f"{cookie.get('name')}={cookie.get('value')}")
+                  logger.info(f"Added cookie: {cookie.get('name')}")
 
-        return ''
+          if cookie_parts:
+              cookie_string = '; '.join(cookie_parts)
+              logger.info(f"Final cookie string: {cookie_string}")
+              return cookie_string
+
+      return ''
 
     def notify(self, content):
         """图书馆预约信息
