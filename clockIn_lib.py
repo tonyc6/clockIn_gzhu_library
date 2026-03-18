@@ -194,7 +194,16 @@ class clockIn():
 
         # 尝试获取用户ID
         user_id = self.get_user_info()
-        logger.info(f'使用用户ID: {user_id}')
+
+        # 尝试通过API获取正确的用户ID
+        api_user_id = self.get_user_info_from_api(cookie)
+        if api_user_id:
+            user_id = api_user_id
+            logger.info(f'使用API获取的用户ID: {user_id}')
+        else:
+            logger.info(f'使用页面获取的用户ID: {user_id}')
+
+        logger.info(f'最终使用用户ID: {user_id}')
 
         # 计算明天的日期，yyyy-MM-dd
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
@@ -202,6 +211,10 @@ class clockIn():
 
         # 将下面的值转换成json格式
         reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00', user_id))
+
+        # 添加延迟避免请求频率限制
+        time.sleep(2)
+
         reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00', user_id))
 
         logger.info(reserve1)
@@ -260,22 +273,74 @@ class clockIn():
     def decalc_devno(self, no):
         return no - 101266684 + 1
 
+    def get_user_info_from_api(self, cookie):
+        """通过API获取用户信息"""
+        try:
+            url = "http://libbooking.gzhu.edu.cn/ic-web/user/info"
+            headers = {
+                'Cookie': cookie,
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.41',
+                'Accept': 'application/json'
+            }
+
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"用户信息API响应: {data}")
+
+                if data.get('code') == 0 and data.get('data'):
+                    user_data = data.get('data')
+                    if user_data.get('accNo'):
+                        logger.info(f"从API获取的用户ID: {user_data.get('accNo')}")
+                        return str(user_data.get('accNo'))
+
+            logger.warning(f"用户信息API调用失败: {response.status_code}, {response.text}")
+            return None
+
+        except Exception as e:
+            logger.warning(f"获取用户信息API调用异常: {e}")
+            return None
+
     def get_user_info(self):
         """尝试从页面获取用户信息"""
         try:
-            # 尝试从页面中提取用户信息
+            # 1. 从localStorage/sessionStorage获取
             user_info = self.driver.execute_script(
                 "return localStorage.getItem('userInfo') || sessionStorage.getItem('userInfo') || '{}'"
             )
             logger.info(f"用户信息: {user_info}")
 
-            # 尝试获取用户ID
+            # 2. 尝试获取用户ID
             user_id = self.driver.execute_script(
                 "return localStorage.getItem('userId') || sessionStorage.getItem('userId') || '101598216'"
             )
-            logger.info(f"用户ID: {user_id}")
 
+            # 3. 尝试从页面元素中获取用户信息
+            try:
+                user_elements = self.driver.execute_script(
+                    """
+                    var elements = document.querySelectorAll('[class*=\"user\"], [id*=\"user\"], .username, .userid');
+                    for (var i = 0; i < elements.length; i++) {
+                        if (elements[i].textContent && elements[i].textContent.trim()) {
+                            return elements[i].textContent.trim();
+                        }
+                    }
+                    return null;
+                    """
+                )
+                if user_elements:
+                    logger.info(f"从页面元素获取的用户信息: {user_elements}")
+            except:
+                pass
+
+            # 4. 尝试从URL参数中获取
+            current_url = self.driver.current_url
+            if 'ticket=' in current_url:
+                logger.info(f"当前URL包含ticket参数: {current_url}")
+
+            logger.info(f"使用默认用户ID: {user_id}")
             return user_id
+
         except Exception as e:
             logger.warning(f"获取用户信息失败: {e}")
             return '101598216'
