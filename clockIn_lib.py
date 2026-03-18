@@ -176,53 +176,63 @@ class clockIn():
         logger.info('step2 正在转到图书馆界面')
         logger.info('标题: ' + self.driver.title)
 
-    def step3(self):
-        logger.info('step3 准备进行图书馆预定座位操作')
-        logger.info('标题: ' + self.driver.title)
+def step3(self):
+          logger.info('step3 准备进行图书馆预定座位操作')
+          logger.info('标题: ' + self.driver.title)
 
-        cookie = self.get_cookie()
+          # 确保在正确的域名下获取cookie
+          if 'libbooking.gzhu.edu.cn' not in self.driver.current_url:
+              logger.info('正在跳转到图书馆域名...')
+              self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+              time.sleep(3)
 
-        if cookie == '':
-            logger.info('没找到cookie')
+          cookie = self.get_cookie()
 
-            # 尝试访问
-            self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+          if cookie == '':
+              logger.info('没找到cookie')
 
-            # 计算时间
-            start = datetime.datetime.now()
-            time.sleep(5)
-            end = datetime.datetime.now()
-            logger.info('等待时间: ' + str((end - start).seconds))
+              # 重新尝试访问
+              self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
 
-            self.step3()
-            return
+              # 计算时间
+              start = datetime.datetime.now()
+              time.sleep(5)
+              end = datetime.datetime.now()
+              logger.info('等待时间: ' + str((end - start).seconds))
 
-        logger.info('primary cookie: ' + cookie)
+              cookie = self.get_cookie()
+              if cookie == '':
+                  logger.error('仍然无法获取cookie，跳过本次预约')
+                  return
 
-        # 计算明天的日期，yyyy-MM-dd
-        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
-        tomorrow = tomorrow.strftime('%Y-%m-%d')
+          logger.info('primary cookie: ' + cookie)
 
-        # 将下面的值转换成json格式
-        reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:30:00', '18:00:00'))
-        reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '18:20:00', '22:10:00'))
+          # 计算明天的日期，yyyy-MM-dd
+          tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+          tomorrow = tomorrow.strftime('%Y-%m-%d')
 
-        logger.info(reserve1)
-        logger.info(reserve2)
+          # 将下面的值转换成json格式
+          reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00'))
+          reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00'))
 
-        message = f'''{tomorrow} 座位101-{self.SEATNO}，上午预定：{'预约成功' if reserve1.get('code') == 0 else '预约失败，设备在该时间段内已被预约'}
-            {tomorrow} 座位101-{self.SEATNO}，下午预定：{'预约成功' if reserve2.get('code') == 0 else '预约失败，设备在该时间段内已被预约'}
-        '''
+          logger.info(reserve1)
+          logger.info(reserve2)
 
-        logger.info(message)
+          message = f'''{tomorrow} 座位101-{self.SEATNO}，上午预定：{'预约成功' if reserve1.get('code') == 0 else
+  '预约失败，设备在该时间段内已被预约'}
+              {tomorrow} 座位101-{self.SEATNO}，下午预定：{'预约成功' if reserve2.get('code') == 0 else
+  '预约失败，设备在该时间段内已被预约'}
+          '''
 
-        # 发送消息
-        self.notify(message)
+          logger.info(message)
 
-        # 发送请求成功，可以结束程序了
-        self.fail = False
-        self.driver.quit()
-        exit(0)
+          # 发送消息
+          self.notify(message)
+
+          # 发送请求成功，可以结束程序了
+          self.fail = False
+          self.driver.quit()
+          exit(0)
 
     def reserve_lib_seat(self, cookie, tomorrow, startTime, endTime):
         url = "http://libbooking.gzhu.edu.cn/ic-web/reserve"
