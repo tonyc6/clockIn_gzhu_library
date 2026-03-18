@@ -192,13 +192,17 @@ class clockIn():
 
         logger.info('primary cookie: ' + cookie)
 
+        # 尝试获取用户ID
+        user_id = self.get_user_info()
+        logger.info(f'使用用户ID: {user_id}')
+
         # 计算明天的日期，yyyy-MM-dd
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
         tomorrow = tomorrow.strftime('%Y-%m-%d')
 
         # 将下面的值转换成json格式
-        reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00'))
-        reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00'))
+        reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00', user_id))
+        reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00', user_id))
 
         logger.info(reserve1)
         logger.info(reserve2)
@@ -217,15 +221,19 @@ class clockIn():
         self.driver.quit()
         exit(0)
 
-    def reserve_lib_seat(self, cookie, tomorrow, startTime, endTime):
+    def reserve_lib_seat(self, cookie, tomorrow, startTime, endTime, user_id=None):
         url = "http://libbooking.gzhu.edu.cn/ic-web/reserve"
+
+        # 使用传入的用户ID，如果没有则尝试从环境变量获取，再没有则使用默认值
+        if user_id is None:
+            user_id = os.environ.get('USER_ID', '101598216')
 
         payload = json.dumps({
             "sysKind": 8,
-            "appAccNo": 101598216,
+            "appAccNo": int(user_id),
             "memberKind": 1,
             "resvMember": [
-                101598216
+                int(user_id)
             ],
             "resvBeginTime": f"{tomorrow} {startTime}",
             "resvEndTime": f"{tomorrow} {endTime}",
@@ -251,6 +259,26 @@ class clockIn():
 
     def decalc_devno(self, no):
         return no - 101266684 + 1
+
+    def get_user_info(self):
+        """尝试从页面获取用户信息"""
+        try:
+            # 尝试从页面中提取用户信息
+            user_info = self.driver.execute_script(
+                "return localStorage.getItem('userInfo') || sessionStorage.getItem('userInfo') || '{}'"
+            )
+            logger.info(f"用户信息: {user_info}")
+
+            # 尝试获取用户ID
+            user_id = self.driver.execute_script(
+                "return localStorage.getItem('userId') || sessionStorage.getItem('userId') || '101598216'"
+            )
+            logger.info(f"用户ID: {user_id}")
+
+            return user_id
+        except Exception as e:
+            logger.warning(f"获取用户信息失败: {e}")
+            return '101598216'
 
     def get_cookie(self):
         # 获取Cookie字符串
