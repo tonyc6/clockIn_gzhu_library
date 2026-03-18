@@ -21,7 +21,7 @@ class clockIn():
         self.xuhao = str(os.environ['XUHAO'])
         self.mima = str(os.environ['MIMA'])
         self.SEATNO = str(os.environ['SEATNO'])
-        self.pushplus = str(os.environ['PUSHPLUS'])
+        self.pushplus = str(os.environ.get('PUSHPLUS', ''))
 
         if self.SEATNO == '':
             exit('请在Github Secrets中设置SEATNO')
@@ -349,6 +349,11 @@ class clockIn():
     def test_user_id(self, cookie, user_id):
         """测试用户ID是否有效"""
         try:
+            # 首先检查用户ID是否为数字
+            if not user_id.isdigit():
+                logger.info(f"用户ID {user_id} 不是数字，跳过测试")
+                return False
+                
             # 使用一个简单的预约请求来测试用户ID
             tomorrow = datetime.date.today() + datetime.timedelta(days=1)
             tomorrow = tomorrow.strftime('%Y-%m-%d')
@@ -379,8 +384,8 @@ class clockIn():
 
             logger.info(f"测试用户ID {user_id} 结果: {result}")
 
-            # 如果返回的不是"请用户使用自己的账号预约"，说明这个ID可能是正确的
-            if result.get('message') != '请用户使用自己的账号预约':
+            # 只有当返回的不是"请用户使用自己的账号预约"且不是"请求参数错误"时，才认为ID可能正确
+            if result.get('message') != '请用户使用自己的账号预约' and result.get('code') != 100:
                 logger.info(f"用户ID {user_id} 可能是正确的")
                 return True
             else:
