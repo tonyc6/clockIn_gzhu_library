@@ -54,7 +54,6 @@ class clockIn():
         options.keep_alive = True
 
 
-
         self.driver = selenium.webdriver.Chrome(options=options)
 
         self.wdwait = WebDriverWait(self.driver, 30)
@@ -80,18 +79,6 @@ class clockIn():
                 self.step2()
                 self.step3()
 
-                # if self.page == 0:
-                #     self.step0()
-                #
-                # if self.page in [0, 1]:
-                #     self.step1()
-                #
-                # if self.page in [0, 1, 2]:
-                #     self.step2()
-                #
-                # if self.page in [0, 1, 2, 3]:
-                #     self.step3()
-
             except Exception:
                 logger.error(traceback.format_exc())
                 try:
@@ -108,7 +95,6 @@ class clockIn():
                     logger.error("图书馆预定失败")
 
         self.driver.quit()
-        # self.notify()
 
     def step0(self):
         """转到图书馆界面
@@ -121,7 +107,7 @@ class clockIn():
 
         if self.driver.title == 'Information Commons':
             # 说明验证通过，直接进入了界面
-            return self.step3()
+            return
 
         logger.info('标题1: ' + self.driver.title)
 
@@ -176,63 +162,60 @@ class clockIn():
         logger.info('step2 正在转到图书馆界面')
         logger.info('标题: ' + self.driver.title)
 
-def step3(self):
-          logger.info('step3 准备进行图书馆预定座位操作')
-          logger.info('标题: ' + self.driver.title)
+    def step3(self):
+        logger.info('step3 准备进行图书馆预定座位操作')
+        logger.info('标题: ' + self.driver.title)
 
-          # 确保在正确的域名下获取cookie
-          if 'libbooking.gzhu.edu.cn' not in self.driver.current_url:
-              logger.info('正在跳转到图书馆域名...')
-              self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
-              time.sleep(3)
+        # 确保在正确的域名下获取cookie
+        if 'libbooking.gzhu.edu.cn' not in self.driver.current_url:
+            logger.info('正在跳转到图书馆域名...')
+            self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+            time.sleep(3)
 
-          cookie = self.get_cookie()
+        # 最多尝试3次获取cookie
+        for attempt in range(3):
+            cookie = self.get_cookie()
 
-          if cookie == '':
-              logger.info('没找到cookie')
+            if cookie != '':
+                break
 
-              # 重新尝试访问
-              self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+            logger.info(f'第{attempt + 1}次尝试获取cookie失败')
 
-              # 计算时间
-              start = datetime.datetime.now()
-              time.sleep(5)
-              end = datetime.datetime.now()
-              logger.info('等待时间: ' + str((end - start).seconds))
+            if attempt < 2:  # 不是最后一次尝试
+                # 重新尝试访问
+                self.driver.get("http://libbooking.gzhu.edu.cn/#/ic/home")
+                time.sleep(5)
+            else:
+                logger.error('3次尝试都无法获取cookie，跳过本次预约')
+                self.fail = True
+                return
 
-              cookie = self.get_cookie()
-              if cookie == '':
-                  logger.error('仍然无法获取cookie，跳过本次预约')
-                  return
+        logger.info('primary cookie: ' + cookie)
 
-          logger.info('primary cookie: ' + cookie)
+        # 计算明天的日期，yyyy-MM-dd
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        tomorrow = tomorrow.strftime('%Y-%m-%d')
 
-          # 计算明天的日期，yyyy-MM-dd
-          tomorrow = datetime.date.today() + datetime.timedelta(days=1)
-          tomorrow = tomorrow.strftime('%Y-%m-%d')
+        # 将下面的值转换成json格式
+        reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00'))
+        reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00'))
 
-          # 将下面的值转换成json格式
-          reserve1 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '9:00:00', '12:00:00'))
-          reserve2 = json.loads(self.reserve_lib_seat(cookie, tomorrow, '14:00:00', '18:00:00'))
+        logger.info(reserve1)
+        logger.info(reserve2)
 
-          logger.info(reserve1)
-          logger.info(reserve2)
+        message = f'''{tomorrow} 座位101-{self.SEATNO}，上午预定：{'预约成功' if reserve1.get('code') == 0 else '预约失败，设备在该时间段内已被预约'}
+            {tomorrow} 座位101-{self.SEATNO}，下午预定：{'预约成功' if reserve2.get('code') == 0 else '预约失败，设备在该时间段内已被预约'}
+        '''
 
-          message = f'''{tomorrow} 座位101-{self.SEATNO}，上午预定：{'预约成功' if reserve1.get('code') == 0 else
-  '预约失败，设备在该时间段内已被预约'}
-              {tomorrow} 座位101-{self.SEATNO}，下午预定：{'预约成功' if reserve2.get('code') == 0 else
-  '预约失败，设备在该时间段内已被预约'}
-          '''
+        logger.info(message)
 
-          logger.info(message)
+        # 发送消息
+        self.notify(message)
 
-          # 发送消息
-          self.notify(message)
-
-          # 发送请求成功，可以结束程序了
-          self.fail = False
-          self.driver.quit()
-          exit(0)
+        # 发送请求成功，可以结束程序了
+        self.fail = False
+        self.driver.quit()
+        exit(0)
 
     def reserve_lib_seat(self, cookie, tomorrow, startTime, endTime):
         url = "http://libbooking.gzhu.edu.cn/ic-web/reserve"
@@ -269,41 +252,41 @@ def step3(self):
     def decalc_devno(self, no):
         return no - 101266684 + 1
 
-     def get_cookie(self):
-          # 获取Cookie字符串
-          current_url = self.driver.current_url
-          logger.info(f'当前URL: {current_url}')
+    def get_cookie(self):
+        # 获取Cookie字符串
+        current_url = self.driver.current_url
+        logger.info(f'当前URL: {current_url}')
 
-          ans = self.driver.get_cookies()
-          logger.info('所有cookies: ' + str(ans))
+        ans = self.driver.get_cookies()
+        logger.info('所有cookies: ' + str(ans))
 
-          if len(ans) != 0:
-              # 构建所有cookie的字符串
-              cookie_parts = []
-              for cookie in ans:
-                  domain = cookie.get('domain', '')
-                  name = cookie.get('name', '')
-                  value = cookie.get('value', '')
+        if len(ans) != 0:
+            # 构建所有cookie的字符串
+            cookie_parts = []
+            for cookie in ans:
+                domain = cookie.get('domain', '')
+                name = cookie.get('name', '')
+                value = cookie.get('value', '')
 
-                  logger.info(f'检查cookie: {name} (domain: {domain})')
+                logger.info(f'检查cookie: {name} (domain: {domain})')
 
-                  # 检查相关域名
-                  if (domain.endswith('libbooking.gzhu.edu.cn') or
-                      domain.endswith('gzhu.edu.cn') or
-                      'ic-cookie' in name or
-                      'JSESSIONID' in name):
+                # 检查相关域名
+                if (domain.endswith('libbooking.gzhu.edu.cn') or
+                    domain.endswith('gzhu.edu.cn') or
+                    'ic-cookie' in name or
+                    'JSESSIONID' in name):
 
-                      cookie_parts.append(f"{name}={value}")
-                      logger.info(f"Added cookie: {name}")
+                    cookie_parts.append(f"{name}={value}")
+                    logger.info(f"Added cookie: {name}")
 
-              if cookie_parts:
-                  cookie_string = '; '.join(cookie_parts)
-                  logger.info(f"Final cookie string: {cookie_string}")
-                  return cookie_string
-              else:
-                  logger.warning('没有找到相关的cookie')
+            if cookie_parts:
+                cookie_string = '; '.join(cookie_parts)
+                logger.info(f"Final cookie string: {cookie_string}")
+                return cookie_string
+            else:
+                logger.warning('没有找到相关的cookie')
 
-          return ''
+        return ''
 
     def notify(self, content):
         """图书馆预约信息
