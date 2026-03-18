@@ -196,12 +196,26 @@ class clockIn():
         user_id = self.get_user_info()
 
         # 尝试通过API获取正确的用户ID
-        api_user_id = self.get_user_info_from_api(cookie)
-        if api_user_id:
-            user_id = api_user_id
-            logger.info(f'使用API获取的用户ID: {user_id}')
+        self.get_user_info_from_api(cookie)  # 只是为了获取可能的token
+
+        # 尝试从学号生成用户ID
+        possible_user_ids = self.generate_possible_user_ids()
+        logger.info(f'可能的userID列表: {possible_user_ids}')
+
+        # 测试每个可能的用户ID
+        valid_user_id = None
+        for test_id in possible_user_ids:
+            logger.info(f'测试用户ID: {test_id}')
+            test_result = self.test_user_id(cookie, test_id)
+            if test_result:
+                valid_user_id = test_id
+                break
+
+        if valid_user_id:
+            user_id = valid_user_id
+            logger.info(f'找到有效的用户ID: {user_id}')
         else:
-            logger.info(f'使用页面获取的用户ID: {user_id}')
+            logger.warning(f'无法确定正确的用户ID，使用默认值: {user_id}')
 
         logger.info(f'最终使用用户ID: {user_id}')
 
@@ -273,6 +287,87 @@ class clockIn():
     def decalc_devno(self, no):
         return no - 101266684 + 1
 
+    def generate_possible_user_ids(self):
+        """根据学号生成可能的用户ID"""
+        possible_ids = []
+
+        # 添加默认ID
+        possible_ids.append('101598216')
+
+        # 尝试基于学号生成ID
+        if self.xuhao:
+            try:
+                # 直接使用学号
+                possible_ids.append(self.xuhao)
+
+                # 学号转换为整数
+                if self.xuhao.isdigit():
+                    student_num = int(self.xuhao)
+                    possible_ids.append(str(student_num))
+
+                    # 尝试一些常见的转换方式
+                    possible_ids.append(str(student_num + 100000000))
+                    possible_ids.append(str(student_num + 101000000))
+                    possible_ids.append(str(student_num + 101500000))
+                    possible_ids.append(str(student_num + 101590000))
+                    possible_ids.append(str(student_num + 101598000))
+
+            except Exception as e:
+                logger.warning(f"生成用户ID时出错: {e}")
+
+        # 去重并保持顺序
+        unique_ids = []
+        for id_val in possible_ids:
+            if id_val not in unique_ids:
+                unique_ids.append(id_val)
+
+        return unique_ids
+
+    def test_user_id(self, cookie, user_id):
+        """测试用户ID是否有效"""
+        try:
+            # 使用一个简单的预约请求来测试用户ID
+            tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+            tomorrow = tomorrow.strftime('%Y-%m-%d')
+
+            url = "http://libbooking.gzhu.edu.cn/ic-web/reserve"
+            payload = json.dumps({
+                "sysKind": 8,
+                "appAccNo": int(user_id),
+                "memberKind": 1,
+                "resvMember": [int(user_id)],
+                "resvBeginTime": f"{tomorrow} 09:00:00",
+                "resvEndTime": f"{tomorrow} 12:00:00",
+                "testName": "",
+                "captcha": "",
+                "resvProperty": 0,
+                "resvDev": [self.calc_dev_no(int(self.SEATNO))],
+                "memo": ""
+            })
+
+            headers = {
+                'Cookie': cookie,
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.41',
+                'Content-Type': 'application/json'
+            }
+
+            response = requests.request("POST", url, headers=headers, data=payload, timeout=5)
+            result = response.json()
+
+            logger.info(f"测试用户ID {user_id} 结果: {result}")
+
+            # 如果返回的不是"请用户使用自己的账号预约"，说明这个ID可能是正确的
+            if result.get('message') != '请用户使用自己的账号预约':
+                logger.info(f"用户ID {user_id} 可能是正确的")
+                return True
+            else:
+                logger.info(f"用户ID {user_id} 不正确")
+                return False
+
+        except Exception as e:
+            logger.warning(f"测试用户ID {user_id} 时出错: {e}")
+            return False
+
     def get_user_info_from_api(self, cookie):
         """通过API获取用户信息"""
         try:
@@ -290,9 +385,19 @@ class clockIn():
 
                 if data.get('code') == 0 and data.get('data'):
                     user_data = data.get('data')
-                    if user_data.get('accNo'):
-                        logger.info(f"从API获取的用户ID: {user_data.get('accNo')}")
-                        return str(user_data.get('accNo'))
+
+                    # 如果返回的是字符串，可能是一个token，我们可以尝试在预约时使用这个token
+                    if isinstance(user_data, str):
+                        logger.info(f"获取到用户token: {user_data[:20]}...")
+                        # 将这个token存储起来，可能在预约时需要
+                        self.user_token = user_data
+                        return None  # 无法从token中提取用户ID，返回None
+
+                    # 处理对象格式
+                    elif isinstance(user_data, dict):
+                        if user_data.get('accNo'):
+                            logger.info(f"从API获取的用户ID: {user_data.get('accNo')}")
+                            return str(user_data.get('accNo'))
 
             logger.warning(f"用户信息API调用失败: {response.status_code}, {response.text}")
             return None
